@@ -31,6 +31,19 @@ function HttpStream (id, response) {
     return this;
   };
 
+  this.handleHttpPost = function (req, res) {
+    req.setEncoding("utf8");
+    var buffer = "";
+    req.on("data", function(data) {
+      buffer += data;
+    });
+    req.on("end", function () {
+      self.emit("data", buffer);
+      res.writeHead(200, {"Content-Type": "text/plain"});
+      res.end("OK");
+    });
+  };
+
   this.write = function (data, callback) {
     wait_buffer.push([data, callback]);
     buffer_size += data.length;
@@ -53,6 +66,7 @@ function HttpStream (id, response) {
   function tick() {
     if (self.isReady() && wait_buffer.length > 0) {
       response.writeHead(200,{"Content-Type": "application/octet-stream"});
+      self.updateAge();
       is_ready = false;
       while (wait_buffer.length > 0) {
         var packet = wait_buffer.pop();
@@ -71,7 +85,7 @@ function HttpStream (id, response) {
 }
 HttpStream.prototype = events.EventEmitter.prototype;
 
-MAX_BUFFER_SIZE = 1024 * 1000; // 10 KB
+MAX_BUFFER_SIZE = 1024 * 10; // 10 KB
 MAX_AGE         = 10 * 1000; // 10 seconds
 
 function HttpStreamServer (httpServer, prefix) {
@@ -89,8 +103,12 @@ function HttpStreamServer (httpServer, prefix) {
   function tick () {
     for (key in streams) {
       if (streams.hasOwnProperty(key)) {
-        console.log("SIZE: " + streams[key].getBufferSize());
-        if (!streams[key].isReady() && (streams[key].getBufferSize() > MAX_BUFFER_SIZE || streams[key].getAge() > MAX_AGE)) {
+        //console.log("SIZE: " + streams[key].getBufferSize());
+        if ((!streams[key].isReady()) && (streams[key].getBufferSize() > MAX_BUFFER_SIZE || streams[key].getAge() > MAX_AGE)) {
+          console.log("Stream is ready: " + streams[key].isReady());
+          console.log("Stream age     : " + streams[key].getAge());
+          console.log("Stream size    : " + streams[key].getBufferSize());
+          console.log("DELETING STREAM: " + key);
           streams[key].close();
           delete streams[key];
         }
@@ -101,15 +119,18 @@ function HttpStreamServer (httpServer, prefix) {
   tick();
 
   httpServer.on("request", function (req, res) {
-    if (req.url.match(new RegExp("/"+prefix+"/open"))) {
+    // Open
+    if (req.url.match(new RegExp("^/"+prefix+"/open$"))) {
       var new_id = getNewId();
       res.setCookie("stream"+server_id, new_id);
       var stream = new HttpStream(new_id);
       streams[current_id] = stream;
-      res.writeHead(200,{});
-      res.end("");
+      res.writeHead(200, {"Content-Type":"text/plain"});
+      res.end("OK");
       process.nextTick(function() { self.emit("connection", stream); });
-    } else if (req.url.match(new RegExp("/"+prefix+"/read"))) {
+
+      // Read
+    } else if (req.url.match(new RegExp("^/"+prefix+"/read$"))) {
       var session_id = req.getCookie("stream"+server_id);
       if (session_id && streams[session_id]) {
         console.log("Found stream: ");
@@ -119,6 +140,20 @@ function HttpStreamServer (httpServer, prefix) {
         res.writeHead(500, {});
         res.end("Internal Error");
       }
+
+      // Write
+    } else if (req.url.match(new RegExp("^/"+prefix+"/write$"))) {
+      var session_id = req.getCookie("stream"+server_id);
+      if (session_id && streams[session_id]) {
+        console.log("Found stream: ");
+        console.log(streams[session_id].getId());
+        streams[session_id].handleHttpPost(req, res);
+      } else {
+        res.writeHead(500, {});
+        res.end("Internal Error");
+      }
+
+      // Pass off to original server
     } else {
       fs.readFile("./test.html", function(err, data) {
         res.writeHead(200,{"Content-Type": "text/html"});
@@ -143,7 +178,11 @@ stream_server.on("connection", function(stream) {
   var interval = setInterval(function() { 
     console.log("Writing to stream #" + stream.getId());
     stream.write(stream.getId() + " Hello world! " + (c++));
-  }, 1);
+  }, 20000);
+  stream.on("data", function (data) {
+    console.log("I GOT SOME DATA: " + data);  
+    stream.write("You Said: " + data);
+  });
   stream.on("close",function() { clearInterval(interval) });
 });
 

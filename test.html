@@ -16,19 +16,75 @@
     <script src="http://code.jquery.com/jquery-1.4.4.min.js"></script>
       <script type="text/javascript">
 
-        $("document").ready(function () {
-          function doRead() {
-            $.get("http://localhost:8080/stream/read", function(data) {
-              console.log(data.split('\x00'));
-              doRead();
-            });
-          }
-          setTimeout(function () {
-            $.get("http://localhost:8080/stream/open", function(data) {
-              doRead();
-            })
-          }, 500);
-        });
+function EventEmitter () {
+  void(0);
+};
+EventEmitter.prototype.on = function (event, callback) {
+  if (!this._events) this._events = {};
+  if (!this._events[event]) this._events[event] = [];
+  this._events[event].push(callback);
+};
+EventEmitter.prototype.emit = function () {
+  var event  = arguments[0];
+  var args   = Array.prototype.slice.call(arguments).slice(1);
+  var events = this._events[event] ? this._events[event] : [];
+  for (var i = 0; i < events.length; i++) {
+    events[i].apply(this, args);
+  }
+};  
+
+function HttpSocket () {
+
+  var self = this;
+
+  function readLoop () {
+    $.get("/stream/read", function(data) {
+      var parsed = data.split('\x00');
+      parsed.reverse();
+      for (var i = 0; i < parsed.length; i++) {
+        if (parsed[i]) self.emit("data",parsed[i]);
+      }
+      readLoop();
+    });
+  };
+
+  function connect() {
+    $.get("/stream/open", function(data) {
+      readLoop();
+      self.emit("connect");
+    })  
+  };
+
+  this.write = function write (data, callback) {
+    $.post("/stream/write", data, callback);
+  };
+
+  connect();
+
+}
+HttpSocket.prototype = EventEmitter.prototype;
+
+
+$("document").ready(function () {
+  
+  window.stream = new HttpSocket();
+  stream.on("connect", function() {
+    stream.write("Hello 1", function () {
+      stream.write("Hello 2", function () {
+        stream.write("Hello 3");
+      });
+    });
+    stream.write("Test 1");
+    stream.write("Test 2");
+    stream.write("Test 3");
+    stream.write("Test 4");
+    stream.write("Test 5");
+  });
+  stream.on("data", function(data) {
+    console.log(data);
+  });
+
+});
         
       </script>
     </head>
