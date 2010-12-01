@@ -17,14 +17,17 @@
       <script type="text/javascript">
 
         $("document").ready(function () {
-          function doGet() {
-            $.get("http://localhost:8080/stream", function(data) {
+          function doRead() {
+            $.get("http://localhost:8080/stream/read", function(data) {
               console.log(data);
-              doGet();
+              doRead();
             });
           }
-          doGet();
-
+          setTimeout(function () {
+            $.get("http://localhost:8080/stream/open", function(data) {
+              doRead();
+            })
+          }, 500);
         });
         
       </script>
