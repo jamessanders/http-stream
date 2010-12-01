@@ -52,12 +52,16 @@ function HttpStream (id, response) {
 
   function tick() {
     if (self.isReady() && wait_buffer.length > 0) {
-      var packet = wait_buffer.pop();
       response.writeHead(200,{"Content-Type": "application/octet-stream"});
-      response.end(packet[0]);
-      buffer_size -= packet[0].length;
       is_ready = false;
-      if (packet[1]) packet[1]();
+      while (wait_buffer.length > 0) {
+        var packet = wait_buffer.pop();
+        response.write(packet[0]);
+        response.write('\x00');
+        buffer_size -= packet[0].length;
+        if (packet[1]) response.end(packet[1]);
+      }
+      response.end();
     }
     process.nextTick(tick);
   };
@@ -67,7 +71,7 @@ function HttpStream (id, response) {
 }
 HttpStream.prototype = events.EventEmitter.prototype;
 
-MAX_BUFFER_SIZE = 1024 * 4; // 4 KB
+MAX_BUFFER_SIZE = 1024 * 1000; // 10 KB
 MAX_AGE         = 10 * 1000; // 10 seconds
 
 function HttpStreamServer (httpServer, prefix) {
@@ -83,9 +87,9 @@ function HttpStreamServer (httpServer, prefix) {
   };
 
   function tick () {
-    console.log("TICK");
     for (key in streams) {
       if (streams.hasOwnProperty(key)) {
+        console.log("SIZE: " + streams[key].getBufferSize());
         if (!streams[key].isReady() && (streams[key].getBufferSize() > MAX_BUFFER_SIZE || streams[key].getAge() > MAX_AGE)) {
           streams[key].close();
           delete streams[key];
@@ -139,7 +143,7 @@ stream_server.on("connection", function(stream) {
   var interval = setInterval(function() { 
     console.log("Writing to stream #" + stream.getId());
     stream.write(stream.getId() + " Hello world! " + (c++));
-  }, 100);
+  }, 1);
   stream.on("close",function() { clearInterval(interval) });
 });
 

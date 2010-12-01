@@ -19,7 +19,7 @@
         $("document").ready(function () {
           function doRead() {
             $.get("http://localhost:8080/stream/read", function(data) {
-              console.log(data);
+              console.log(data.split('\x00'));
               doRead();
             });
           }
