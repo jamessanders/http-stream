@@ -1,7 +1,7 @@
 var events  = require("events");
 var http    = require("http");
 var fs      = require("fs");
-var cookies = require("./lib/cookie-node");
+var cookies = require("cookie");
 
 function HttpStream (id, response) {
 
@@ -39,12 +39,13 @@ function HttpStream (id, response) {
     });
     req.on("end", function () {
       self.emit("data", buffer);
+      self.emit("message", buffer);
       res.writeHead(200, {"Content-Type": "text/plain"});
       res.end("OK");
     });
   };
 
-  this.write = function (data, callback) {
+  this.write = this.send = function (data, callback) {
     wait_buffer.push([data, callback]);
     buffer_size += data.length;
     return this;
@@ -118,6 +119,12 @@ function HttpStreamServer (httpServer, prefix) {
   };
   tick();
 
+  var orig_request_listeners = httpServer.listeners("request");
+  httpServer.removeAllListeners("request");
+  for (var i = 0; i < orig_request_listeners.length; i++) {
+    httpServer.on("_request", orig_request_listeners[i]);
+  }
+
   httpServer.on("request", function (req, res) {
     // Open
     if (req.url.match(new RegExp("^/"+prefix+"/open$"))) {
@@ -155,20 +162,17 @@ function HttpStreamServer (httpServer, prefix) {
 
       // Pass off to original server
     } else {
-      fs.readFile("./test.html", function(err, data) {
-        res.writeHead(200,{"Content-Type": "text/html"});
-        res.end(data);
-      });
+      httpServer.emit("_request", req, res);
     }
   });
 
 }
-HttpStreamServer.prototype = events.EventEmitter.prototype
-
+HttpStreamServer.prototype = events.EventEmitter.prototype;
+exports.HttpStreamServer = HttpStreamServer;
 ////////////////////////////////////////////////////////////////////////
 // test app
 ////////////////////////////////////////////////////////////////////////
-
+/*
 var http_server = http.createServer();
 var stream_server = new HttpStreamServer(http_server);
 
@@ -187,3 +191,4 @@ stream_server.on("connection", function(stream) {
 });
 
 http_server.listen(8080, "0.0.0.0");
+*/
