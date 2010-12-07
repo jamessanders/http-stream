@@ -1,0 +1,13 @@
+{
+  "name": "http-stream",
+  "description": "",
+  "version": "0.0.1",
+  "author": "",
+  "dependencies": {"cookie": ">= 0.1.3"},
+  "keywords": [],
+  "directories": { "lib": "lib/http-stream" },
+  "scripts": {},
+  "bin": {},
+  "engines": { "node": ">= 0.2.4" }
+}
+
